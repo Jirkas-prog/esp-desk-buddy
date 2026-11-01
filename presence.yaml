@@ -1,0 +1,140 @@
+esp32_ble_tracker:
+  id: ble_scanner
+  scan_parameters:
+    active: false
+    interval: 320ms
+    window: 30ms
+    duration: 30s
+    continuous: false
+  on_ble_advertise:
+    - lambda: |-
+        char mac[18],uuid[37];
+        auto beacon=x.get_ibeacon();
+        id(buddy).observe(x.address_str_to(mac),beacon.has_value()?beacon->get_uuid().to_str(uuid):"",x.get_rssi());
+
+switch:
+  - platform: template
+    id: ble_enabled
+    name: BLE vyhledávání
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).ble_on=true;
+      - script.execute: refresh_voice
+    turn_off_action:
+      - lambda: |-
+          id(buddy).ble_on=false;
+          for(auto &p:id(buddy).presence) p={};
+      - esp32_ble_tracker.stop_scan:
+
+text:
+  - platform: template
+    name: BLE 1 adresa nebo iBeacon UUID
+    id: ble_identity_0
+    mode: text
+    min_length: 0
+    max_length: 36
+    initial_value: ""
+    restore_value: false
+    set_action:
+      - lambda: |-
+          if(buddy_logic::valid_identity(x)) id(ble_identity_0).publish_state(x);
+          else ESP_LOGW("buddy", "BLE: expected MAC or UUID");
+    on_value:
+      - lambda: id(buddy).set_identity(0,x);
+  - platform: template
+    name: BLE 2 adresa nebo iBeacon UUID
+    id: ble_identity_1
+    mode: text
+    min_length: 0
+    max_length: 36
+    initial_value: ""
+    restore_value: false
+    set_action:
+      - lambda: |-
+          if(buddy_logic::valid_identity(x)) id(ble_identity_1).publish_state(x);
+          else ESP_LOGW("buddy", "BLE: expected MAC or UUID");
+    on_value:
+      - lambda: id(buddy).set_identity(1,x);
+  - platform: template
+    name: BLE 3 adresa nebo iBeacon UUID
+    id: ble_identity_2
+    mode: text
+    min_length: 0
+    max_length: 36
+    initial_value: ""
+    restore_value: false
+    set_action:
+      - lambda: |-
+          if(buddy_logic::valid_identity(x)) id(ble_identity_2).publish_state(x);
+          else ESP_LOGW("buddy", "BLE: expected MAC or UUID");
+    on_value:
+      - lambda: id(buddy).set_identity(2,x);
+  - platform: template
+    name: BLE 4 adresa nebo iBeacon UUID
+    id: ble_identity_3
+    mode: text
+    min_length: 0
+    max_length: 36
+    initial_value: ""
+    restore_value: false
+    set_action:
+      - lambda: |-
+          if(buddy_logic::valid_identity(x)) id(ble_identity_3).publish_state(x);
+          else ESP_LOGW("buddy", "BLE: expected MAC or UUID");
+    on_value:
+      - lambda: id(buddy).set_identity(3,x);
+
+binary_sensor:
+  - platform: template
+    name: BLE 1 poblíž
+    id: ble_near_0
+    device_class: presence
+    lambda: return id(buddy).presence[0].near;
+  - platform: template
+    name: BLE 2 poblíž
+    id: ble_near_1
+    device_class: presence
+    lambda: return id(buddy).presence[1].near;
+  - platform: template
+    name: BLE 3 poblíž
+    id: ble_near_2
+    device_class: presence
+    lambda: return id(buddy).presence[2].near;
+  - platform: template
+    name: BLE 4 poblíž
+    id: ble_near_3
+    device_class: presence
+    lambda: return id(buddy).presence[3].near;
+
+sensor:
+  - platform: template
+    name: BLE 1 signál
+    unit_of_measurement: dBm
+    device_class: signal_strength
+    update_interval: 5s
+    lambda: return id(buddy).presence[0].seen?id(buddy).presence[0].rssi:NAN;
+  - platform: template
+    name: BLE 2 signál
+    unit_of_measurement: dBm
+    device_class: signal_strength
+    update_interval: 5s
+    lambda: return id(buddy).presence[1].seen?id(buddy).presence[1].rssi:NAN;
+  - platform: template
+    name: BLE 3 signál
+    unit_of_measurement: dBm
+    device_class: signal_strength
+    update_interval: 5s
+    lambda: return id(buddy).presence[2].seen?id(buddy).presence[2].rssi:NAN;
+  - platform: template
+    name: BLE 4 signál
+    unit_of_measurement: dBm
+    device_class: signal_strength
+    update_interval: 5s
+    lambda: return id(buddy).presence[3].seen?id(buddy).presence[3].rssi:NAN;
+
+text_sensor:
+  - platform: template
+    name: Poslední BLE zařízení
+    lambda: return id(buddy).nearby;
+    update_interval: 10s

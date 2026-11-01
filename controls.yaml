@@ -1,0 +1,457 @@
+number:
+  - platform: template
+    id: latitude
+    name: "Zeměpisná šířka"
+    min_value: -90
+    max_value: 90
+    step: 0.0001
+    initial_value: 50
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.latitude=x; id(buddy).invalidate();
+  - platform: template
+    id: longitude
+    name: "Zeměpisná délka"
+    min_value: -180
+    max_value: 180
+    step: 0.0001
+    initial_value: 14
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.longitude=x; id(buddy).invalidate();
+  - platform: template
+    id: brightness
+    name: "Ruční jas"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 70
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).manual_brightness=x; id(buddy).invalidate();
+  - platform: template
+    id: eye_size
+    name: "Velikost očí"
+    min_value: 0.65
+    max_value: 1.25
+    step: 0.05
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).eye_size=x; id(buddy).invalidate();
+  - platform: template
+    id: animation_speed
+    name: "Rychlost animací"
+    min_value: 0.5
+    max_value: 2
+    step: 0.1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).animation_speed=x; id(buddy).invalidate();
+  - platform: template
+    id: rssi_enter
+    name: "BLE práh přiblížení (dBm)"
+    min_value: -100
+    max_value: -30
+    step: 1
+    initial_value: -65
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).rssi_enter=x; id(buddy).invalidate();
+  - platform: template
+    id: rssi_hysteresis
+    name: "BLE hystereze (dB)"
+    min_value: 2
+    max_value: 20
+    step: 1
+    initial_value: 8
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).rssi_hysteresis=x; id(buddy).invalidate();
+  - platform: template
+    id: presence_timeout
+    name: "BLE odchod po sekundách"
+    min_value: 10
+    max_value: 300
+    step: 1
+    initial_value: 30
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).presence_timeout=x; id(buddy).invalidate();
+  - platform: template
+    id: battery_cutoff
+    name: "Vypnutí baterie pod (V)"
+    min_value: 3.2
+    max_value: 3.6
+    step: 0.05
+    initial_value: 3.2
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).cutoff=x; id(buddy).invalidate();
+  - platform: template
+    id: motion_threshold
+    name: "Citlivost pohybu"
+    min_value: 1
+    max_value: 15
+    step: 0.5
+    initial_value: 3
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).motion_threshold=x; id(buddy).invalidate();
+  - platform: template
+    id: wake_duration
+    name: "Probuzení displeje (s)"
+    min_value: 5
+    max_value: 300
+    step: 5
+    initial_value: 30
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).wake_seconds=x; id(buddy).invalidate();
+  - platform: template
+    id: morning_minute
+    name: "Ráno – čas v minutách od půlnoci"
+    min_value: 0
+    max_value: 1439
+    step: 1
+    initial_value: 420
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.morning.minute=int(x); id(buddy).invalidate();
+  - platform: template
+    id: morning_offset
+    name: "Ráno – posun události v minutách"
+    min_value: -720
+    max_value: 720
+    step: 1
+    initial_value: -30
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.morning.offset=int(x); id(buddy).invalidate();
+  - platform: template
+    id: morning_brightness
+    name: "Ráno – jas"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 35
+    optimistic: true
+    restore_value: true
+    mode: box
+    unit_of_measurement: '%'
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.levels[0]=x; id(buddy).invalidate();
+  - platform: template
+    id: day_minute
+    name: "Den – čas v minutách od půlnoci"
+    min_value: 0
+    max_value: 1439
+    step: 1
+    initial_value: 480
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.day.minute=int(x); id(buddy).invalidate();
+  - platform: template
+    id: day_offset
+    name: "Den – posun události v minutách"
+    min_value: -720
+    max_value: 720
+    step: 1
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.day.offset=int(x); id(buddy).invalidate();
+  - platform: template
+    id: day_brightness
+    name: "Den – jas"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 70
+    optimistic: true
+    restore_value: true
+    mode: box
+    unit_of_measurement: '%'
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.levels[1]=x; id(buddy).invalidate();
+  - platform: template
+    id: evening_minute
+    name: "Večer – čas v minutách od půlnoci"
+    min_value: 0
+    max_value: 1439
+    step: 1
+    initial_value: 1080
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.evening.minute=int(x); id(buddy).invalidate();
+  - platform: template
+    id: evening_offset
+    name: "Večer – posun události v minutách"
+    min_value: -720
+    max_value: 720
+    step: 1
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.evening.offset=int(x); id(buddy).invalidate();
+  - platform: template
+    id: evening_brightness
+    name: "Večer – jas"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 15
+    optimistic: true
+    restore_value: true
+    mode: box
+    unit_of_measurement: '%'
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.levels[2]=x; id(buddy).invalidate();
+  - platform: template
+    id: night_minute
+    name: "Noc – čas v minutách od půlnoci"
+    min_value: 0
+    max_value: 1439
+    step: 1
+    initial_value: 1380
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.night.minute=int(x); id(buddy).invalidate();
+  - platform: template
+    id: night_offset
+    name: "Noc – posun události v minutách"
+    min_value: -720
+    max_value: 720
+    step: 1
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.night.offset=int(x); id(buddy).invalidate();
+  - platform: template
+    id: night_brightness
+    name: "Noc – jas"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    unit_of_measurement: '%'
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.levels[3]=x; id(buddy).invalidate();
+
+select:
+  - platform: template
+    id: timezone
+    name: "Časové pásmo"
+    options: [Europe/Prague, Europe/London, Europe/Helsinki, UTC]
+    initial_option: Europe/Prague
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).set_zone(x);
+  - platform: template
+    id: eye_shape
+    name: "Tvar očí"
+    options: [Oválné, Nižší oválné, Kulaté, Zaoblené čtverce, Obdélníkové, Čtvercové, Široká štěrbina, Úzká štěrbina, Spánek]
+    initial_option: Oválné
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).shape=i;
+  - platform: template
+    id: mood
+    name: "Nálada"
+    options: [Automatická, Mrkání, Radost, Mrknutí jedním okem, Překvapení, Ospalost, Podezřívavost, Zamilované, Skenování, Pomalý glitch, Mhouření, Trojúhelníky, Kruhy, Kroužení, Závrať, Rozhlédnutí, Pohled vlevo, Pohled vpravo, Obočí, Vztek, Rychlý glitch, Smutek]
+    initial_option: Automatická
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).base_mood=i;
+  - platform: template
+    id: eye_color
+    name: "Barva očí"
+    options: [Tyrkysová, Oranžová, Červená, Růžová]
+    initial_option: Tyrkysová
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).color=i;
+  - platform: template
+    id: clock_style
+    name: "Vzhled hodin"
+    options: [Digitální, Analogové, Digitální se sekundami]
+    initial_option: Digitální
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).clock_style=i;
+  - platform: template
+    id: screen
+    name: "Obrazovka"
+    options: [Oči, Hodiny, Hlas, Napájení]
+    initial_option: Oči
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).screen=i;
+  - platform: template
+    id: morning_event
+    name: "Ráno – událost"
+    options: [Pevný čas, Východ slunce, Západ slunce]
+    initial_option: Východ slunce
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.morning.kind=buddy_logic::Event(i); id(buddy).invalidate();
+  - platform: template
+    id: day_event
+    name: "Den – událost"
+    options: [Pevný čas, Východ slunce, Západ slunce]
+    initial_option: Východ slunce
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.day.kind=buddy_logic::Event(i); id(buddy).invalidate();
+  - platform: template
+    id: evening_event
+    name: "Večer – událost"
+    options: [Pevný čas, Východ slunce, Západ slunce]
+    initial_option: Západ slunce
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.evening.kind=buddy_logic::Event(i); id(buddy).invalidate();
+  - platform: template
+    id: night_event
+    name: "Noc – událost"
+    options: [Pevný čas, Východ slunce, Západ slunce]
+    initial_option: Pevný čas
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(buddy).schedule.night.kind=buddy_logic::Event(i); id(buddy).invalidate();
+
+switch:
+  - platform: template
+    id: automatic
+    name: "Automatický denní režim"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).automatic=true;
+    turn_off_action:
+      - lambda: id(buddy).automatic=false;
+  - platform: template
+    id: display_enabled
+    name: "Displej"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).display_on=true;
+    turn_off_action:
+      - lambda: id(buddy).display_on=false;
+  - platform: template
+    id: motion_wake
+    name: "Probuzení pohybem"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).motion_wake=true;
+    turn_off_action:
+      - lambda: id(buddy).motion_wake=false;
+  - platform: template
+    id: idle_emotions
+    name: "Samovolné emoce"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).idle_emotions=true;
+    turn_off_action:
+      - lambda: id(buddy).idle_emotions=false;
+
+text:
+  - platform: template
+    name: Umístění
+    id: location
+    mode: text
+    min_length: 1
+    max_length: 48
+    initial_value: Stůl
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: id(buddy).location=x;

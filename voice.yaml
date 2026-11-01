@@ -1,0 +1,371 @@
+# Both codecs share physical clocks. Half-duplex at 16 kHz avoids clock fighting.
+i2s_audio:
+  - id: audio_bus
+    i2s_lrclk_pin:
+      number: GPIO45
+      ignore_strapping_warning: true
+    i2s_bclk_pin: GPIO9
+    i2s_mclk_pin: GPIO42
+
+audio_adc:
+  - platform: es7210
+    id: mic_adc
+    i2c_id: board_i2c
+    address: 0x40
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    mic_gain: 24dB
+
+audio_dac:
+  - platform: es8311
+    id: speaker_dac
+    i2c_id: board_i2c
+    address: 0x18
+    sample_rate: 16000
+    bits_per_sample: 16bit
+
+microphone:
+  - platform: i2s_audio
+    id: board_mic
+    i2s_audio_id: audio_bus
+    adc_type: external
+    i2s_din_pin: GPIO10
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: left
+    pdm: false
+
+speaker:
+  - platform: i2s_audio
+    id: board_speaker
+    i2s_audio_id: audio_bus
+    dac_type: external
+    i2s_dout_pin: GPIO8
+    audio_dac: speaker_dac
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: mono
+    timeout: 200ms
+    buffer_duration: 100ms
+
+media_player:
+  - platform: speaker
+    id: voice_player
+    name: Hlasový výstup
+    volume_initial: 0.6
+    files:
+      - id: speaker_test_tone
+        file: assets/speaker-test.flac
+    announcement_pipeline:
+      speaker: board_speaker
+      format: FLAC
+      sample_rate: 16000
+      num_channels: 1
+    on_announcement:
+      - micro_wake_word.stop:
+      - esp32_ble_tracker.stop_scan:
+      - if:
+          condition:
+            script.is_running: cancel_voice
+          then:
+            - media_player.stop:
+                id: voice_player
+                announcement: true
+          else:
+            - lambda: id(buddy).voice_busy=true;id(buddy).voice_phase=3;id(buddy).status="Odpovidam";
+    on_idle:
+      - delay: 300ms
+      - script.execute: refresh_voice
+    on_volume:
+      - lambda: id(speaker_volume).publish_state(x*100.f);
+
+micro_wake_word:
+  id: wake_engine
+  microphone:
+    id: wake_mic_source
+    microphone: board_mic
+    gain_factor: 4
+  models:
+    - model: https://raw.githubusercontent.com/esphome/micro-wake-word-models/40ff33f57f8fc6ad71a75ef085abbf742495b225/models/v2/okay_nabu.json
+      id: wake_nabu
+    - model: ${alternate_wake_model}
+      id: wake_alternate
+  on_wake_word_detected:
+    - if:
+        condition:
+          and:
+            - switch.is_on: microphone_enabled
+            - voice_assistant.connected:
+            - not:
+                script.is_running: cancel_voice
+        then:
+          - lambda: id(buddy).wake_reaction();
+          - voice_assistant.start:
+              wake_word: !lambda return wake_word;
+
+voice_assistant:
+  id: assist
+  microphone: board_mic
+  media_player: voice_player
+  micro_wake_word: wake_engine
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  on_client_connected:
+    - lambda: id(buddy).status="Pripraven";
+    - script.execute: refresh_voice
+  on_client_disconnected:
+    - micro_wake_word.stop:
+    - lambda: id(buddy).voice_busy=false;id(buddy).status="Home Assistant odpojen";
+  on_listening:
+    - esp32_ble_tracker.stop_scan:
+    - lambda: if(!id(cancel_voice).is_running()) {id(buddy).voice_busy=true;id(buddy).voice_phase=1;id(buddy).status="Posloucham";}
+  on_stt_vad_end:
+    - lambda: if(!id(cancel_voice).is_running()) {id(buddy).voice_phase=2;id(buddy).status="Premyslim";}
+  on_tts_start:
+    - lambda: if(!id(cancel_voice).is_running()) {id(buddy).voice_phase=3;id(buddy).status="Odpovidam";}
+  on_end:
+    # HA can finish its pipeline while the speaker is still playing its reply.
+    - lambda: if(!id(cancel_voice).is_running() && id(buddy).voice_phase!=3) {id(buddy).voice_busy=false;id(buddy).status="Pripraven";}
+    - delay: 500ms
+    - script.execute: refresh_voice
+  on_error:
+    - lambda: |-
+        if(!id(cancel_voice).is_running()) {id(buddy).voice_busy=false;id(buddy).status="Chyba hlasu: "+code;}
+    - delay: 1s
+    - script.execute: refresh_voice
+
+script:
+  - id: cancel_voice
+    mode: single
+    then:
+      # request_stop sends an abort to HA (not just end-of-microphone audio).
+      - logger.log: "Voice cancelled by user"
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+      - media_player.stop:
+          id: voice_player
+          announcement: true
+      - speaker.stop: board_speaker
+      - lambda: |-
+          id(buddy).voice_busy=false;id(buddy).voice_phase=0;
+          id(buddy).status=id(microphone_enabled).state?"Pripraven":"Mikrofon vypnut";
+      - component.update: voice_status
+      # Keep late pipeline callbacks from restoring the cancelled expression/audio.
+      - wait_until:
+          condition:
+            and:
+              - not:
+                  voice_assistant.is_running:
+              - not:
+                  media_player.is_announcing: voice_player
+              - not:
+                  speaker.is_playing: board_speaker
+      - delay: 500ms
+      - script.execute: refresh_voice
+  - id: refresh_voice
+    mode: restart
+    then:
+      - delay: 500ms
+      - if:
+          condition:
+            and:
+              - not:
+                  voice_assistant.is_running:
+              - not:
+                  media_player.is_announcing: voice_player
+              - not:
+                  speaker.is_playing: board_speaker
+          then:
+            - lambda: |-
+                if(id(buddy).voice_busy) {
+                  id(buddy).voice_busy=false;
+                  id(buddy).status=id(microphone_enabled).state?"Pripraven":"Mikrofon vypnut";
+                }
+      - if:
+          condition:
+            and:
+              - switch.is_on: microphone_enabled
+              - voice_assistant.connected:
+              - not:
+                  script.is_running: cancel_voice
+              - not:
+                  voice_assistant.is_running:
+              - not:
+                  micro_wake_word.is_running:
+              - not:
+                  media_player.is_announcing: voice_player
+              - not:
+                  speaker.is_playing: board_speaker
+          then:
+            - micro_wake_word.start:
+      - if:
+          condition:
+            and:
+              - switch.is_on: ble_enabled
+              - not:
+                  voice_assistant.is_running:
+              - not:
+                  media_player.is_announcing: voice_player
+          then:
+            - esp32_ble_tracker.start_scan:
+                continuous: true
+
+button:
+  - platform: template
+    name: Zrušit rozhovor
+    id: stop_conversation
+    on_press:
+      - script.execute: cancel_voice
+  - platform: template
+    name: Test reproduktoru
+    id: test_speaker
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            and:
+              - switch.is_on: speaker_enabled
+              - not:
+                  script.is_running: cancel_voice
+              - not:
+                  voice_assistant.is_running:
+              - not:
+                  media_player.is_announcing: voice_player
+          then:
+            - micro_wake_word.stop:
+            - delay: 300ms
+            - logger.log: "Speaker test: two local tones"
+            - media_player.speaker.play_on_device_media_file:
+                id: voice_player
+                media_file: speaker_test_tone
+                announcement: true
+
+switch:
+  - platform: gpio
+    id: amplifier
+    internal: true
+    pin:
+      number: GPIO46
+      ignore_strapping_warning: true
+    restore_mode: ALWAYS_OFF
+  - platform: template
+    name: Mikrofon
+    id: microphone_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: id(buddy).status=id(assist).get_api_connection()?"Pripraven":"Home Assistant odpojen";
+      - script.execute: refresh_voice
+    turn_off_action:
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+      - lambda: id(buddy).voice_busy=false;id(buddy).status="Mikrofon vypnut";
+  - platform: template
+    name: Reproduktor
+    id: speaker_enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - switch.turn_on: amplifier
+      - media_player.unmute: voice_player
+    turn_off_action:
+      - switch.turn_off: amplifier
+      - media_player.mute: voice_player
+
+sensor:
+  # Passive measurements never acquire the shared half-duplex I2S bus.
+  # These are raw digital levels, not calibrated acoustic dB SPL.
+  - platform: sound_level
+    microphone: board_mic
+    passive: true
+    measurement_duration: 500ms
+    rms:
+      name: Mikrofon úroveň
+      entity_category: diagnostic
+      unit_of_measurement: dBFS
+      device_class: ""
+    peak:
+      name: Mikrofon špička
+      entity_category: diagnostic
+      unit_of_measurement: dBFS
+      device_class: ""
+  - platform: template
+    name: Mikrofon zesílení ADC
+    entity_category: diagnostic
+    unit_of_measurement: dB
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      uint8_t reg;
+      if (!id(mic_adc).read_byte(0x43, &reg)) return NAN;
+      const uint8_t gain = reg & 0x0f;
+      if (gain <= 11) return gain * 3.f;
+      if (gain <= 14) return 34.5f + (gain - 12) * 1.5f;
+      return NAN;
+
+number:
+  - platform: template
+    name: Zesílení probouzení
+    id: wake_input_gain
+    entity_category: config
+    min_value: 1
+    max_value: 16
+    step: 1
+    initial_value: 4
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: id(wake_mic_source).set_gain_factor(static_cast<int>(x));
+  - platform: template
+    name: Práh probouzecí fráze
+    id: wake_threshold
+    min_value: 0.1
+    max_value: 0.99
+    step: 0.01
+    initial_value: 0.90
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          id(wake_nabu).set_probability_cutoff(uint8_t(x*255));
+          id(wake_alternate).set_probability_cutoff(uint8_t(x*255));
+  - platform: template
+    name: Hlasitost
+    id: speaker_volume
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 60
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: '%'
+    set_action:
+      - media_player.volume_set:
+          id: voice_player
+          volume: !lambda return x/100;
+
+select:
+  - platform: template
+    name: Zesílení mikrofonu
+    id: microphone_gain
+    options: ["0 dB", "6 dB", "12 dB", "18 dB", "24 dB", "30 dB", "36 dB"]
+    initial_option: "24 dB"
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          if (!id(mic_adc).set_mic_gain(i*6.f))
+            ESP_LOGE("buddy_audio", "Microphone gain write failed");
+  - platform: template
+    name: Probouzecí fráze
+    id: wake_phrase
+    options: [Okay Nabu, "${alternate_wake_phrase}"]
+    initial_option: Okay Nabu
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: |-
+          if(x=="Okay Nabu") {id(wake_nabu).enable();id(wake_alternate).disable();}
+          else {id(wake_nabu).disable();id(wake_alternate).enable();}

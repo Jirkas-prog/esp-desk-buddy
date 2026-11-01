@@ -1,0 +1,145 @@
+i2c:
+  id: board_i2c
+  sda: GPIO15
+  scl: GPIO14
+  frequency: 400kHz
+  scan: true
+
+spi:
+  id: panel_spi
+  type: quad
+  clk_pin: GPIO38
+  data_pins: [GPIO4, GPIO5, GPIO6, GPIO7]
+
+font:
+  - file: fonts/Roboto.ttf
+    id: small_font
+    size: 19
+  - file: fonts/Roboto.ttf
+    id: clock_font
+    size: 112
+  - file: fonts/Roboto.ttf
+    id: date_font
+    size: 34
+  - file: fonts/Roboto.ttf
+    id: control_font
+    size: 66
+
+display:
+  - platform: mipi_spi
+    id: panel
+    model: CO5300
+    bus_mode: quad
+    data_rate: 40MHz
+    spi_id: panel_spi
+    cs_pin: GPIO12
+    reset_pin: GPIO39
+    dimensions:
+      width: 466
+      height: 466
+      offset_width: 6
+    color_depth: 16
+    update_interval: never
+    auto_clear_enabled: false
+
+lvgl:
+  id: gui
+  displays: [panel]
+  touchscreens: [touch]
+  rotation: 90
+  # At <=25% ESPHome first allocates from scarce internal RAM. 50% uses PSRAM
+  # and preserves internal DMA memory for SPI, Wi-Fi and voice.
+  buffer_size: 50%
+  default_font: small_font
+  bg_color: 0x000000
+  refresh_interval: 33ms
+
+touchscreen:
+  - platform: cst9220 # Native driver explicitly supports CST9217 as well.
+    id: touch
+    display: panel
+    i2c_id: board_i2c
+    address: 0x5A
+    interrupt_pin: GPIO11
+    reset_pin: GPIO40
+    transform:
+      mirror_x: true
+      mirror_y: true
+    on_touch:
+      - switch.turn_on: display_enabled
+      - lambda: id(buddy).touch_start(touch.y,465-touch.x);
+    on_update:
+      - lambda: |-
+          for(auto &t:touches) if(t.state<=2) {id(buddy).touch_move(t.y,465-t.x);break;}
+    on_release:
+      - lambda: |-
+          switch(id(buddy).touch_end()) {
+            case 1: id(microphone_enabled).toggle(); break;
+            case 2: id(speaker_enabled).toggle(); break;
+            case 3: {auto c=id(speaker_volume).make_call();c.set_value(std::max(0.f,id(speaker_volume).state-10));c.perform();break;}
+            case 4: {auto c=id(speaker_volume).make_call();c.set_value(std::min(100.f,id(speaker_volume).state+10));c.perform();break;}
+            case 5: id(buddy).power_off();break;
+            case 6: {auto c=id(clock_style).make_call();c.select_next(true);c.perform();break;}
+            case 7: {auto c=id(eye_shape).make_call();c.select_next(true);c.perform();break;}
+            case 8: id(cancel_voice).execute();break;
+          }
+          id(screen).publish_state(id(screen).at(id(buddy).screen).value());
+
+motion:
+  - platform: qmi8658
+    id: imu
+    i2c_id: board_i2c
+    address: 0x6B
+    accelerometer_range: 4G
+    accelerometer_odr: 125HZ
+    gyroscope_odr: 125HZ
+    update_interval: 100ms
+
+sensor:
+  - platform: motion
+    motion_id: imu
+    type: acceleration_x
+    id: accel_x
+    internal: true
+  - platform: motion
+    motion_id: imu
+    type: acceleration_y
+    id: accel_y
+    internal: true
+  - platform: motion
+    motion_id: imu
+    type: acceleration_z
+    id: accel_z
+    internal: true
+    on_value:
+      - lambda: id(buddy).motion(id(accel_x).state,id(accel_y).state,x);
+  - platform: template
+    name: Napětí baterie
+    id: battery_voltage
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 2
+    lambda: return id(buddy).volts;
+    update_interval: 10s
+  - platform: template
+    name: Baterie
+    unit_of_measurement: '%'
+    device_class: battery
+    lambda: return id(buddy).percent;
+    update_interval: 10s
+  - platform: wifi_signal
+    name: Wi-Fi signál
+    update_interval: 60s
+  - platform: uptime
+    name: Doba běhu
+    update_interval: 60s
+
+binary_sensor:
+  - platform: template
+    name: Napájení USB
+    lambda: return id(buddy).usb;
+  - platform: template
+    name: Baterie připojena
+    lambda: return id(buddy).battery_present;
+  - platform: status
+    name: Připojení

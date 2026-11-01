@@ -1,0 +1,11 @@
+#pragma once
+namespace esphome::desk_buddy {
+static const char SETUP_PAGE[]=R"HTML(<!doctype html><html lang="cs"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Síť · Stolní kamarád</title>
+<style>body{font:16px system-ui;background:#0c151e;color:#e3edf4;max-width:600px;margin:40px auto;padding:20px}h1{color:#28f4da}fieldset{border:1px solid #354753;border-radius:12px;margin:20px 0;padding:20px}label{display:block;margin:14px 0}input,button{font:inherit;padding:12px;border:1px solid #566670;border-radius:8px;background:#182630;color:inherit;box-sizing:border-box;width:100%}button{background:#28f4da;color:#12232a;cursor:pointer}a{color:#28f4da}p{line-height:1.6}</style>
+<h1>Stolní kamarád</h1><p><a href="/">← Všechna nastavení a aktuální stav</a></p>
+<p>Vyplň jen síť, kterou chceš změnit. Prázdné jméno Wi‑Fi nebo MQTT host ponechá danou sekci beze změny. Hesla se ze zařízení nezobrazují. U měněné sekce zadej heslo znovu; prázdné heslo znamená síť bez hesla.</p>
+<form id="settings"><fieldset><legend>Wi‑Fi</legend><label>SSID<input name="wifi_ssid" maxlength="32" autocomplete="off"></label><label>Heslo<input name="wifi_password" type="password" maxlength="63" autocomplete="new-password"></label></fieldset>
+<fieldset><legend>MQTT</legend><label>Broker<input name="mqtt_host" maxlength="96" placeholder="mqtt.local"></label><label>Port<input name="mqtt_port" type="number" min="1" max="65535" value="1883"></label><label>Uživatel<input name="mqtt_user" maxlength="64" autocomplete="off"></label><label>Heslo<input name="mqtt_password" type="password" maxlength="96" autocomplete="new-password"></label></fieldset>
+<button>Uložit a restartovat</button></form><p id="result" role="status"></p>
+<script>document.querySelector('form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button'),r=document.querySelector('#result');b.disabled=true;try{const x=await fetch('/setup',{method:'POST',headers:{'X-Buddy-Setup':'1','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(new FormData(e.target))});r.textContent=await x.text()}catch(x){r.textContent='Spojení se přerušilo. Po restartu otevři adresu zařízení.'}finally{b.disabled=false}};</script></html>)HTML";
+}

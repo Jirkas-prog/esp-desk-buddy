@@ -1,0 +1,365 @@
+--- QuestieV3/main/robot_eyes.cpp
++++ desk_buddy/robot_eyes.cpp
+@@ -672,6 +672,7 @@
+ // Fwd
+ static void apply_base_state(int shape_idx, int color_idx, uint32_t ms, bool from_effect);
+ static void return_to_base_state(uint32_t ms);
++static void schedule_next_idle_action(void);
+ static void schedule_next_state_pick(void);
+ static void brain_pick_random_state(void);
+ static bool current_shape_no_brain(void);
+@@ -971,6 +972,7 @@
+ static void sleep_retry_cb(lv_timer_t *t) {
+     (void)t;
+     s_sleep_retry_timer = NULL;
++    if (s_effect_locked) return;
+     if (!s_root || !left_eye) return;
+     if (is_night_time()) start_sleeping();
+ }
+@@ -987,6 +989,7 @@
+ // Timer callbacks
+ // ============================================================
+ static void settle_cb(lv_timer_t *t) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     (void)t;
+     if (!left_eye) return;
+     if (s_shape_is_state) return;
+@@ -1006,6 +1009,7 @@
+ // Naplánuje jedno mrknutí (obe oci) v čase `delay_ms` od teď.
+ static void schedule_blink(uint32_t delay_ms) {
+     lv_timer_t *t = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)tt;
+         if (left_eye && !s_closed) blink_eyes();
+     }, delay_ms == 0 ? 1 : delay_ms, NULL);
+@@ -1164,7 +1168,9 @@
+     lv_obj_remove_flag(s_frown_mask_l, LV_OBJ_FLAG_HIDDEN);
+     lv_obj_remove_flag(s_frown_mask_r, LV_OBJ_FLAG_HIDDEN);
+     look_to(cfg.look_max_x, -cfg.look_max_y);
+-    lv_timer_t *pt = lv_timer_create([](lv_timer_t *t){ (void)t; if (left_eye) position_masks(); }, 520, NULL);
++    lv_timer_t *pt = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
++        (void)t; if (left_eye) position_masks(); }, 520, NULL);
+     lv_timer_set_repeat_count(pt, 1);
+     s_reaction_until_ms = lv_tick_get() + hold_ms;
+ }
+@@ -1237,6 +1243,7 @@
+     anim_int(left_eye,  lv_obj_get_style_radius(left_eye,  0), cfg.suspicious_radius, cfg.anim_suspicious_resize_ms, set_radius_cb);
+     anim_int(right_eye, lv_obj_get_style_radius(right_eye, 0), cfg.suspicious_radius, cfg.anim_suspicious_resize_ms, set_radius_cb);
+     lv_timer_t *tt = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t;
+         if (!left_eye) return;
+         static int step = 0;
+@@ -1365,12 +1372,14 @@
+     prepare_new_shape();
+     look_to(-cfg.glance_offset_x, 0);
+     lv_timer_t *t1 = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t;
+         if (!left_eye) return;
+         look_to(cfg.glance_offset_x, 0);
+     }, cfg.anim_glance_hold_1_ms, NULL);
+     lv_timer_set_repeat_count(t1, 1);
+     lv_timer_t *t2 = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t;
+         if (!left_eye) return;
+         look_to(0, 0);
+@@ -1384,6 +1393,7 @@
+     prepare_new_shape();
+     look_to(cfg.glance_offset_x, 0);
+     lv_timer_t *t = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)tt; if (!left_eye) return; look_to(0, 0);
+     }, cfg.anim_glance_single_ms, NULL);
+     lv_timer_set_repeat_count(t, 1);
+@@ -1395,6 +1405,7 @@
+     prepare_new_shape();
+     look_to(-cfg.glance_offset_x, 0);
+     lv_timer_t *t = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)tt; if (!left_eye) return; look_to(0, 0);
+     }, cfg.anim_glance_single_ms, NULL);
+     lv_timer_set_repeat_count(t, 1);
+@@ -1516,8 +1527,7 @@
+ static void destroy_triangles(void) {
+     if (s_tri_l) { lv_obj_delete(s_tri_l); s_tri_l = NULL; }
+     if (s_tri_r) { lv_obj_delete(s_tri_r); s_tri_r = NULL; }
+-    // free() v ESP-IDF vede na heap_caps_free() a bezpečně uvolní jak lv_malloc,
+-    // tak heap_caps_malloc buffery.
++    // Buffers come from heap_caps_malloc (PSRAM or internal heap).
+     if (s_tri_buf_l) { free(s_tri_buf_l); s_tri_buf_l = NULL; }
+     if (s_tri_buf_r) { free(s_tri_buf_r); s_tri_buf_r = NULL; }
+     if (left_eye)  lv_obj_remove_flag(left_eye,  LV_OBJ_FLAG_HIDDEN);
+@@ -1526,57 +1536,49 @@
+ 
+ static void draw_triangle_on_canvas(lv_obj_t *canvas, bool right_side, uint32_t color_hex) {
+     if (!canvas) return;
+-    lv_image_dsc_t *dsc = (lv_image_dsc_t *)lv_canvas_get_image(canvas);
+-    if (!dsc || !dsc->data) return;
+-    uint8_t *buf = (uint8_t *)dsc->data;
+-    const int32_t W = cfg.tri_canvas_w;
+-    const int32_t H = cfg.tri_canvas_h;
+-    memset(buf, 0, (size_t)W * (size_t)H * 4u);
+-    const uint8_t B = (uint8_t)(color_hex & 0xFF);
+-    const uint8_t G = (uint8_t)((color_hex >> 8) & 0xFF);
+-    const uint8_t R = (uint8_t)((color_hex >> 16) & 0xFF);
+-
+-    // "Angry brow" trojuhelnik - siroka zakladna dole, sikma horni hrana
+-    // svazi smerem k nosu (dovnitr) nahoru.
+-    // Levé oko: horní pravý vrchol vysoko, horní levý vrchol nízko.
+-    // Pravé oko: zrcadleně.
+-    const int32_t inset  = cfg.tri_inset;
+-    const int32_t x_left  = inset;
+-    const int32_t x_right = W - 1 - inset;
+-    const int32_t y_high  = inset;               // vrchol nahore (blize k nosu)
+-    const int32_t y_low   = H - 1 - inset;       // zakladna dole
+-    // "vnitrni" strana = blize k nosu (u leveho oka vpravo, u praveho vlevo)
+-    const int32_t x_inner = right_side ? x_left  : x_right;
+-    const int32_t x_outer = right_side ? x_right : x_left;
+-
+-    // Trojuhelnik: (x_inner, y_high) - (x_outer, y_low) - (x_inner, y_low).
+-    // Fill: pro kazdy radek y od y_high do y_low, sikma hrana jde z
+-    // (x_inner, y_high) do (x_outer, y_low); zakladna dole je y_low.
+-    const float slope = (float)(x_outer - x_inner) / (float)(y_low - y_high);
+-    for (int32_t y = y_high; y <= y_low; y++) {
+-        float xh_f = (float)x_inner + slope * (float)(y - y_high);
+-        int32_t xh = (int32_t)xh_f;
+-        int32_t x0 = right_side ? x_inner : xh;
+-        int32_t x1 = right_side ? xh      : x_inner;
+-        if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+-        if (x0 < 0) x0 = 0;
+-        if (x1 >= W) x1 = W - 1;
+-        uint8_t *row = buf + (size_t)y * (size_t)W * 4u;
+-        for (int32_t x = x0; x <= x1; x++) {
+-            uint8_t *px = row + (size_t)x * 4u;
+-            px[0] = B; px[1] = G; px[2] = R; px[3] = 0xFF;
++    lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
++    const float w = cfg.tri_canvas_w - 1 - 2 * cfg.tri_inset;
++    const float h = cfg.tri_canvas_h - 1 - 2 * cfg.tri_inset;
++    if (w <= 0 || h <= 0) return;
++    const float diagonal = sqrtf(w*w + h*h);
++    // Inset all three edges, then stroke the smaller triangle with round ends.
++    // This gives true circular corners, with LVGL's anti-aliasing on every edge.
++    const float r = fmaxf(0, fminf(cfg.tri_corner_r, (w+h-diagonal)*0.5f-1));
++    const float x = cfg.tri_canvas_w - 1 - cfg.tri_inset - r;
++    const float y = cfg.tri_canvas_h - 1 - cfg.tri_inset - r;
++    lv_point_precise_t p[3] = {
++        {int32_t(lroundf(x)), int32_t(lroundf(cfg.tri_inset + r*(diagonal+h)/w))},
++        {int32_t(lroundf(cfg.tri_inset + r*(diagonal+w)/h)), int32_t(lroundf(y))},
++        {int32_t(lroundf(x)), int32_t(lroundf(y))}
++    };
++    if (right_side) for (auto &point : p) point.x = cfg.tri_canvas_w - 1 - point.x;
++    lv_layer_t layer;
++    lv_canvas_init_layer(canvas, &layer);
++    lv_draw_triangle_dsc_t fill;
++    lv_draw_triangle_dsc_init(&fill);
++    fill.color = lv_color_hex(color_hex);
++    for (int i=0; i<3; ++i) fill.p[i] = p[i];
++    lv_draw_triangle(&layer, &fill);
++    if (r > 0) {
++        lv_draw_line_dsc_t edge;
++        lv_draw_line_dsc_init(&edge);
++        edge.color = fill.color;
++        edge.width = int32_t(lroundf(2*r));
++        edge.round_start = edge.round_end = true;
++        for (int i=0; i<3; ++i) {
++            edge.p1 = p[i];edge.p2 = p[(i+1)%3];
++            lv_draw_line(&layer, &edge);
+         }
+     }
+-    lv_obj_invalidate(canvas);
++    lv_canvas_finish_layer(canvas, &layer);
+ }
+ 
+ static lv_obj_t *make_triangle_canvas(bool right_side, void **out_buf) {
+     if (!s_root) return NULL;
+-    size_t buf_sz = (size_t)cfg.tri_canvas_w * (size_t)cfg.tri_canvas_h * 4u;
+-    // Zkus PSRAM (velký buffer, ne DMA); fallback na lv_malloc (interní heap).
++    size_t buf_sz = lv_draw_buf_width_to_stride(cfg.tri_canvas_w, LV_COLOR_FORMAT_ARGB8888) * cfg.tri_canvas_h;
++    // Prefer PSRAM; both allocation paths are compatible with free().
+     void *buf = heap_caps_malloc(buf_sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+     if (!buf) buf = heap_caps_malloc(buf_sz, MALLOC_CAP_8BIT);
+-    if (!buf) buf = lv_malloc(buf_sz);
+     if (!buf) {
+         ESP_LOGW(TAG, "triangle canvas alloc failed (%u B, free int=%u, spi=%u)",
+                  (unsigned)buf_sz,
+@@ -1592,7 +1594,7 @@
+     lv_obj_remove_flag(cv, LV_OBJ_FLAG_CLICKABLE);
+     lv_obj_set_align(cv, LV_ALIGN_CENTER);
+     int32_t xc = right_side ? cfg.eye_spacing : -cfg.eye_spacing;
+-    lv_obj_set_pos(cv, xc - cfg.tri_canvas_w / 2, -cfg.tri_canvas_h / 2);
++    lv_obj_set_pos(cv, xc, 0); // CENTER alignment already subtracts half the canvas size.
+     draw_triangle_on_canvas(cv, right_side, cfg.color_eye);
+     return cv;
+ }
+@@ -1609,9 +1611,9 @@
+         lv_obj_add_flag(left_eye,  LV_OBJ_FLAG_HIDDEN);
+         lv_obj_add_flag(right_eye, LV_OBJ_FLAG_HIDDEN);
+         lv_obj_set_style_opa(s_tri_l, LV_OPA_TRANSP, 0);
+-        anim_int(s_tri_l, LV_OPA_TRANSP, LV_OPA_COVER, cfg.anim_triangle_fade_ms, set_opa_cb, anim_path_overshoot);
++        anim_int(s_tri_l, LV_OPA_TRANSP, LV_OPA_COVER, cfg.anim_triangle_fade_ms, set_opa_cb); // Opacity must stay within 0..255.
+         lv_obj_set_style_opa(s_tri_r, LV_OPA_TRANSP, 0);
+-        anim_int(s_tri_r, LV_OPA_TRANSP, LV_OPA_COVER, cfg.anim_triangle_fade_ms, set_opa_cb, anim_path_overshoot);
++        anim_int(s_tri_r, LV_OPA_TRANSP, LV_OPA_COVER, cfg.anim_triangle_fade_ms, set_opa_cb); // Opacity must stay within 0..255.
+         s_shape_is_state = true;
+         s_reaction_until_ms = lv_tick_get() + hold_ms;
+     } else {
+@@ -1832,6 +1834,7 @@
+ }
+ 
+ static void apply_base_state(int shape_idx, int color_idx, uint32_t ms, bool from_effect) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     if (!left_eye) return;
+     if (shape_idx < 0 || shape_idx >= (int)SHAPE_COUNT) shape_idx = SHAPE_OVAL;
+     if (color_idx < 0 || color_idx >= COLOR_COUNT) color_idx = 0;
+@@ -1873,10 +1876,15 @@
+     s_shape_is_state  = true;
+     s_reaction_until_ms = 0;
+ 
++    // Desk buddy: count the quiet interval after the return animation.
++    schedule_next_idle_action();
++    s_next_action_ms += ms;
++
+     // SLEEP: pomalé "dýchání" - oči se pohybují nahoru/dolů jako když spí.
+     // Rozjedeme repeat anim po dokončení tvarové tranzice.
+     if (shape_idx == (int)SHAPE_SLEEP) {
+         lv_timer_t *bt = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+             (void)tt;
+             if (!left_eye) return;
+             if (s_current_shape_idx != (int)SHAPE_SLEEP) return;
+@@ -1948,6 +1956,7 @@
+     schedule_next_state_pick();
+ }
+ 
++static int s_previous_random_effect = -1;
+ static void run_random_effect(void) {
+     // 1) ABSOLUTNÍ šance na BLANK (nezávislá na váhách ostatních efektů).
+     if (BLANK_EFFECT_PERCENT > 0) {
+@@ -1960,15 +1969,15 @@
+ 
+     // 2) Vážený výběr efektu (prob==0 se přeskočí, včetně BLANK řádku).
+     int total = 0;
+-    for (int i = 0; i < EFFECT_COUNT; i++) if (EFFECTS[i].prob > 0) total += EFFECTS[i].prob;
++    for (int i = 0; i < EFFECT_COUNT; i++) if (EFFECTS[i].prob > 0 && i != s_previous_random_effect) total += EFFECTS[i].prob;
+     if (total <= 0) return;
+     int r = rand() % total;
+     int acc = 0;
+     const effect_entry_t *ch = NULL;
+     for (int i = 0; i < EFFECT_COUNT; i++) {
+-        if (EFFECTS[i].prob <= 0) continue;
++        if (EFFECTS[i].prob <= 0 || i == s_previous_random_effect) continue;
+         acc += EFFECTS[i].prob;
+-        if (r < acc) { ch = &EFFECTS[i]; break; }
++        if (r < acc) { ch = &EFFECTS[i]; s_previous_random_effect = i; break; }
+     }
+     if (!ch) return;
+ 
+@@ -1991,6 +2000,7 @@
+     // 5) Návrat do BASE stavu po dokončení efektu (dojezd do středu / defaultu),
+     //    následně dobehne tail pauza než se pusti dalsi efekt.
+     lv_timer_t *st = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t;
+         if (!left_eye) return;
+         if (s_finger_down) return;
+@@ -2000,6 +2010,7 @@
+ }
+ 
+ static void eye_behavior_timer_cb(lv_timer_t *t) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     (void)t;
+     if (!s_parent || !s_root || lv_screen_active() != s_parent) return;
+ 
+@@ -2019,6 +2030,9 @@
+         look_to_smooth(0, 0, cfg.anim_look_smooth_ms);
+         s_look_offcenter = false;
+     }
++
++    // Desk buddy: neither idle effects nor state changes interrupt a rest.
++    if (s_effect_active || int32_t(lv_tick_get() - s_next_action_ms) < 0) return;
+ 
+     // Automatický přechod na jiný base state - brain-pick timer běží i v
+     // no_brain stavech (spánek), aby se po nastaveném čase přepnul jinam.
+@@ -2055,6 +2069,7 @@
+     if (rand() & 1) dizzy_shape(hold);
+     else            glitch_shape(hold);
+     lv_timer_t *st = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t; if (left_eye) return_to_base_state(cfg.anim_settle_ms);
+     }, hold + 200, NULL);
+     lv_timer_set_repeat_count(st, 1);
+@@ -2072,6 +2087,7 @@
+     happy_shape(hold);
+     s_mood_happy_until_ms = lv_tick_get() + 10000;
+     lv_timer_t *st = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t; if (left_eye) return_to_base_state(cfg.anim_settle_ms);
+     }, hold + 200, NULL);
+     lv_timer_set_repeat_count(st, 1);
+@@ -2090,6 +2106,7 @@
+     EFFECTS[s_browse_index].fn(cfg.browse_hold_ms);
+     s_browse_last_ms = lv_tick_get();
+     lv_timer_t *st = lv_timer_create([](lv_timer_t *t){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+         (void)t; if (left_eye) return_to_base_state(cfg.anim_settle_ms);
+     }, cfg.browse_hold_ms + 200, NULL);
+     lv_timer_set_repeat_count(st, 1);
+@@ -2125,6 +2142,7 @@
+ static void do_browse_swipe(lv_dir_t d);
+ 
+ static void root_press_cb(lv_event_t *e) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     (void)e;
+     lv_indev_t *indev = lv_indev_active();
+     if (!indev) return;
+@@ -2161,6 +2179,7 @@
+         angry_shape(1200);
+         s_reaction_until_ms = lv_tick_get() + 1400;
+         lv_timer_t *rt = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+             (void)tt;
+             if (!left_eye) return;
+             // Zpet do spanku (breathing se automaticky nahodi v apply_base_state).
+@@ -2180,6 +2199,7 @@
+ }
+ 
+ static void root_pressing_cb(lv_event_t *e) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     (void)e;
+     if (!s_finger_down) return;
+ 
+@@ -2224,6 +2244,7 @@
+ }
+ 
+ static void root_release_cb(lv_event_t *e) {
++    if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+     s_finger_down = false;
+     s_finger_release_ms = lv_tick_get();
+ 
+@@ -2304,6 +2325,7 @@
+         s_effect_active = true;
+         sad_shape(hold);
+         lv_timer_t *t = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+             (void)tt; if (left_eye) return_to_base_state(cfg.anim_settle_ms);
+         }, hold + 200, NULL);
+         lv_timer_set_repeat_count(t, 1);
+@@ -2328,6 +2350,7 @@
+         s_effect_active = true;
+         sad_shape(hold);
+         lv_timer_t *t = lv_timer_create([](lv_timer_t *tt){
++        if (s_effect_locked) return; // Desk buddy: voice owns the eyes.
+             (void)tt; if (left_eye) return_to_base_state(cfg.anim_settle_ms);
+         }, hold + 200, NULL);
+         lv_timer_set_repeat_count(t, 1);
+@@ -2653,3 +2676,7 @@
+ 
+     ESP_LOGI(TAG, "init_robot_eyes OK (Questie v8 - STATE/EFFECT model)");
+ }
++
++// Desk buddy platform integration.
++#define QUESTIE_INCLUDE_BRIDGE
++#include "questie_bridge_impl.h"
