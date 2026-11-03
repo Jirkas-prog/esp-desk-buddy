@@ -15,12 +15,16 @@ font:
   - file: fonts/Roboto.ttf
     id: small_font
     size: 19
+    glyphsets: [GF_Latin_Kernel]
+    glyphs: ["áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ"]
   - file: fonts/Roboto.ttf
     id: clock_font
     size: 112
   - file: fonts/Roboto.ttf
     id: date_font
     size: 34
+    glyphsets: [GF_Latin_Kernel]
+    glyphs: ["áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ"]
   - file: fonts/Roboto.ttf
     id: control_font
     size: 66

@@ -10,7 +10,7 @@ esphome:
   min_version: 2026.10.0
   project:
     name: deskbuddy.amoled175
-    version: 0.2.7
+    version: 0.2.8
   on_boot:
     priority: -100
     then:
@@ -182,5 +182,5 @@ text_sensor:
   - platform: template
     name: Stav hlasu
     id: voice_status
-    lambda: return id(buddy).status;
+    lambda: return id(buddy).status_text();
     update_interval: 2s

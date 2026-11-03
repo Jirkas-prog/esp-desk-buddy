@@ -305,6 +305,16 @@ number:
 
 select:
   - platform: template
+    id: interface_language
+    name: "Display language / Jazyk displeje"
+    entity_category: config
+    options: [EN, CZ]
+    initial_option: EN
+    optimistic: true
+    restore_value: true
+    on_value:
+      - lambda: id(buddy).set_language(x=="CZ");
+  - platform: template
     id: timezone
     name: "Časové pásmo"
     options: [Europe/Prague, Europe/London, Europe/Helsinki, UTC]

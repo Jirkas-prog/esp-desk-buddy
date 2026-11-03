@@ -71,14 +71,14 @@ float DeskBuddy::brightness() {
 }
 std::string DeskBuddy::phase_name() {
   brightness();
-  if(!automatic) return "rucni";
+  if(!automatic) return tr("rucni");
   const char *names[]={"rano","den","vecer","noc"};
-  return cached_phase_<0 ? "cekam na cas" : names[cached_phase_];
+  return tr(cached_phase_<0 ? "cekam na cas" : names[cached_phase_]);
 }
 std::string DeskBuddy::sun_text(bool rise) {
-  time_t now=::time(nullptr); if(!buddy_logic::valid_time(now)) return "Cas neni synchronizovan";
+  time_t now=::time(nullptr); if(!buddy_logic::valid_time(now)) return tr("Cas neni synchronizovan");
   auto t=buddy_logic::event(buddy_logic::local(now),{rise?buddy_logic::SUNRISE:buddy_logic::SUNSET,0,0},schedule.latitude,schedule.longitude);
-  if(!t) return "Dnes nenastava";
+  if(!t) return tr("Dnes nenastava");
   auto d=buddy_logic::local(t);char s[16];strftime(s,sizeof(s),"%H:%M",&d);return s;
 }
 void DeskBuddy::interact(int emotion,uint32_t duration) {
@@ -118,11 +118,12 @@ bool DeskBuddy::canHandle(AsyncWebServerRequest *r) const {
   return r->url_to(path)=="/setup";
 }
 void DeskBuddy::handleRequest(AsyncWebServerRequest *r) {
+  const bool czech=r->arg("ui_language")=="cs";
   if(r->method()==HTTP_GET) {r->send(200,"text/html; charset=utf-8",SETUP_PAGE);return;}
-  if(r->method()!=HTTP_POST) {r->send(400,"text/plain","POST required");return;}
+  if(r->method()!=HTTP_POST) {r->send(400,"text/plain; charset=utf-8",ui_text(czech,"POST required"));return;}
   // A custom header prevents cross-origin HTML forms from changing credentials.
   auto h=r->get_header("X-Buddy-Setup");
-  if(!h.has_value() || *h!="1") {r->send(400,"text/plain","Missing setup header");return;}
+  if(!h.has_value() || *h!="1") {r->send(400,"text/plain; charset=utf-8",ui_text(czech,"Missing setup header"));return;}
   auto next=network_;
   const auto host=r->arg("mqtt_host"),user=r->arg("mqtt_user"),pass=r->arg("mqtt_password");
   const auto port=r->arg("mqtt_port"),ssid=r->arg("wifi_ssid"),wp=r->arg("wifi_password");
@@ -132,17 +133,17 @@ void DeskBuddy::handleRequest(AsyncWebServerRequest *r) {
   bool valid_host=host.size()<sizeof(next.host);
   for(char c:host) if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='-'||c==':')) valid_host=false;
   if((!mqtt_change&&!wifi_change) || (mqtt_change&&(!valid_host||!valid_port||p<1||p>65535||user.size()>=sizeof(next.user)||pass.size()>=sizeof(next.password))) ||
-      (wifi_change&&(ssid.size()>32||(!wp.empty()&&(wp.size()<8||wp.size()>63))))) {r->send(400,"text/plain; charset=utf-8","Neplatny host, port, SSID nebo heslo.");return;}
+      (wifi_change&&(ssid.size()>32||(!wp.empty()&&(wp.size()<8||wp.size()>63))))) {r->send(400,"text/plain; charset=utf-8",ui_text(czech,"Neplatny host, port, SSID nebo heslo."));return;}
   if(mqtt_change) {
     strcpy(next.host,host.c_str());strcpy(next.user,user.c_str());next.port=p;
     // Password is always explicitly supplied; blank means no MQTT password.
     strcpy(next.password,pass.c_str());
-    if(!network_pref_.save(&next)||!global_preferences->sync()) {r->send(500,"text/plain","NVS save failed");return;}
+    if(!network_pref_.save(&next)||!global_preferences->sync()) {r->send(500,"text/plain; charset=utf-8",ui_text(czech,"NVS save failed"));return;}
     network_=next;
   }
   if(wifi_change) wifi::global_wifi_component->save_wifi_sta(ssid,wp);
   global_preferences->sync();
-  r->send(200,"text/plain; charset=utf-8","Ulozeno. Zarizeni se restartuje.");
+  r->send(200,"text/plain; charset=utf-8",ui_text(czech,"Ulozeno. Zarizeni se restartuje."));
   set_timeout("network_restart",1200,[]{App.safe_reboot();});
 }
 } // namespace esphome::desk_buddy

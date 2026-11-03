@@ -6,6 +6,7 @@
 #include "esphome/components/lvgl/lvgl_esphome.h"
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "logic.h"
+#include "i18n.h"
 #include <array>
 
 namespace esphome::desk_buddy {
@@ -20,6 +21,9 @@ class DeskBuddy : public PollingComponent, public i2c::I2CDevice, public AsyncWe
   void init_ui(font::Font *small,font::Font *large,font::Font *date,font::Font *controls);
   void loop() override;
   void wake_reaction();
+  void set_language(bool czech);
+  const char *tr(const char *source) const { return ui_text(czech_, source); }
+  std::string status_text() const { return desk_buddy::status_text(czech_, status); }
   void touch_start(int x,int y);
   void touch_move(int x,int y) { touch_x_=x; touch_y_=y; }
   int touch_end();
@@ -48,6 +52,8 @@ class DeskBuddy : public PollingComponent, public i2c::I2CDevice, public AsyncWe
   float volts=NAN,percent=NAN;
   bool battery_present=false,usb=false,pmic_ok=false;
  protected:
+  bool czech_=false;
+  std::array<lv_obj_t *,7> translated_labels_{};
   struct NetworkSettings {
     uint32_t version=1;
     char host[97]{},user[65]{},password[97]{};

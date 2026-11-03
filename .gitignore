@@ -27,3 +27,8 @@ PRIVATE*
 *.keystore
 *.p12
 releases/
+
+# ESPHome build cache and browser verification
+.esphome/
+playwright-report/
+test-results/

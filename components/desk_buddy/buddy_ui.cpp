@@ -4,6 +4,7 @@
 
 namespace esphome::desk_buddy {
 namespace {
+constexpr const char *FIXED_LABELS[]={"HLASOVY ASISTENT","STOLNI KAMARAD","PODRZ 2 s PRO VYPNUTI","Zapnuti: USB / PWR","1 / 3    HODINY","2 / 3    HLAS","3 / 3    NAPAJENI"};
 constexpr uint32_t ACCENT=0x00FFEA, MUTED=0x899BA4;
 lv_obj_t *label(lv_obj_t *parent,const char *text,int x,int y,const lv_font_t *font,uint32_t color=ACCENT) {
   auto *o=lv_label_create(parent);
@@ -41,7 +42,7 @@ void DeskBuddy::init_ui(font::Font *small,font::Font *large,font::Font *date,fon
   voice_label_=label(pages_[0],"",233,402,small->get_lv_font(),MUTED);
   clock_time_=label(pages_[1],"--:--",233,225,large->get_lv_font());
   clock_seconds_=label(pages_[1],"",233,295,date->get_lv_font(),MUTED);
-  clock_date_=label(pages_[1],"CEKAM NA CAS",233,353,date->get_lv_font(),MUTED);
+  clock_date_=label(pages_[1],tr("CEKAM NA CAS"),233,353,date->get_lv_font(),MUTED);
   analog_=lv_obj_create(pages_[1]);
   lv_obj_remove_style_all(analog_);
   lv_obj_set_size(analog_,466,466);
@@ -60,18 +61,24 @@ void DeskBuddy::init_ui(font::Font *small,font::Font *large,font::Font *date,fon
     hands_[i]=line(analog_,hand_points_[i],i==2?2:6,i==2?0xFF7855:ACCENT);
   }
   lv_obj_move_foreground(clock_date_);
-  label(pages_[2],"HLASOVY ASISTENT",233,90,date->get_lv_font());
-  mic_label_=label(pages_[2],"MIC ZAP",142,192,small->get_lv_font());
-  speaker_label_=label(pages_[2],"ZVUK ZAP",327,192,small->get_lv_font());
+  translated_labels_[0]=label(pages_[2],tr("HLASOVY ASISTENT"),233,90,date->get_lv_font());
+  mic_label_=label(pages_[2],tr("MIC ZAP"),142,192,small->get_lv_font());
+  speaker_label_=label(pages_[2],tr("ZVUK ZAP"),327,192,small->get_lv_font());
   volume_label_=label(pages_[2],"60%",233,275,controls->get_lv_font());
   label(pages_[2],"-",133,340,controls->get_lv_font(),MUTED);
   label(pages_[2],"+",333,340,controls->get_lv_font(),MUTED);
-  label(pages_[3],"STOLNI KAMARAD",233,100,date->get_lv_font());
+  translated_labels_[1]=label(pages_[3],tr("STOLNI KAMARAD"),233,100,date->get_lv_font());
   battery_label_=label(pages_[3],"",233,173,small->get_lv_font());
   power_label_=label(pages_[3],"",233,218,small->get_lv_font(),MUTED);
-  label(pages_[3],"PODRZ 2 s PRO VYPNUTI",233,275,small->get_lv_font());
-  label(pages_[3],"Zapnuti: USB / PWR",233,318,small->get_lv_font(),MUTED);
-  for(int page=1;page<4;page++) label(pages_[page],page==1?"1 / 3    HODINY":page==2?"2 / 3    HLAS":"3 / 3    NAPAJENI",233,435,small->get_lv_font(),MUTED);
+  translated_labels_[2]=label(pages_[3],tr("PODRZ 2 s PRO VYPNUTI"),233,275,small->get_lv_font());
+  translated_labels_[3]=label(pages_[3],tr("Zapnuti: USB / PWR"),233,318,small->get_lv_font(),MUTED);
+  for(int page=1;page<4;page++) translated_labels_[page+3]=label(pages_[page],page==1?tr("1 / 3    HODINY"):page==2?tr("2 / 3    HLAS"):tr("3 / 3    NAPAJENI"),233,435,small->get_lv_font(),MUTED);
+}
+void DeskBuddy::set_language(bool czech) {
+  czech_=czech;
+  for (size_t i=0;i<translated_labels_.size();++i)
+    if (translated_labels_[i]) lv_label_set_text(translated_labels_[i],tr(FIXED_LABELS[i]));
+  labels_at_=ui_at_-1000; // Refresh live labels without recreating screens or interrupting voice.
 }
 void DeskBuddy::wake_reaction() {
   voice_busy=true;voice_phase=1;status="Posloucham";
@@ -109,20 +116,20 @@ void DeskBuddy::loop() {
   }
   if(!changed && !buddy_logic::elapsed(ui_at_,labels_at_,1000)) return;
   labels_at_=ui_at_;
-  lv_label_set_text(voice_label_,voice_busy?(voice_phase==1?"POSLOUCHAM":voice_phase==2?"PREMYSLIM":"ODPOVIDAM"):mic_on?"":"MIKROFON VYPNUT");
-  lv_label_set_text(mic_label_,mic_on?"MIC ZAP":"MIC VYP");
-  lv_label_set_text(speaker_label_,speaker_on?"ZVUK ZAP":"ZVUK VYP");
+  lv_label_set_text(voice_label_,voice_busy?(voice_phase==1?tr("POSLOUCHAM"):voice_phase==2?tr("PREMYSLIM"):tr("ODPOVIDAM")):mic_on?"":tr("MIKROFON VYPNUT"));
+  lv_label_set_text(mic_label_,mic_on?tr("MIC ZAP"):tr("MIC VYP"));
+  lv_label_set_text(speaker_label_,speaker_on?tr("ZVUK ZAP"):tr("ZVUK VYP"));
   lv_label_set_text_fmt(volume_label_,"%.0f%%",volume);
-  lv_label_set_text_fmt(battery_label_,"Baterie %.0f%% / %.2f V",percent,volts);
-  lv_label_set_text(power_label_,usb?"Napajeni USB":"Napajeni baterie");
+  lv_label_set_text_fmt(battery_label_,tr("Baterie %.0f%% / %.2f V"),percent,volts);
+  lv_label_set_text(power_label_,usb?tr("Napajeni USB"):tr("Napajeni baterie"));
   if(screen!=1) return;
   time_t now=::time(nullptr);auto d=buddy_logic::local(now);
   bool valid=buddy_logic::valid_time(now),analog=valid&&clock_style==1;
   visible(analog_,analog);visible(clock_time_,!analog);visible(clock_seconds_,valid&&clock_style==2);
-  if(!valid) {lv_label_set_text(clock_time_,"--:--");lv_label_set_text(clock_date_,"CEKAM NA CAS");return;}
+  if(!valid) {lv_label_set_text(clock_time_,"--:--");lv_label_set_text(clock_date_,tr("CEKAM NA CAS"));return;}
   char text[24];strftime(text,sizeof(text),"%H:%M",&d);lv_label_set_text(clock_time_,text);
   strftime(text,sizeof(text),"%S",&d);lv_label_set_text(clock_seconds_,text);
-  strftime(text,sizeof(text),"%d. %m. %Y",&d);lv_label_set_text(clock_date_,text);
+  strftime(text,sizeof(text),czech_?"%d. %m. %Y":"%Y-%m-%d",&d);lv_label_set_text(clock_date_,text);
   int ox=int((ui_at_/60000)%5)-2,oy=int((ui_at_/120000)%5)-2;
   lv_obj_align(clock_time_,LV_ALIGN_CENTER,ox,(clock_style==2?201:225)-233+oy);
   lv_obj_align(clock_date_,LV_ALIGN_CENTER,ox,(analog?411:353)-233+oy);
